@@ -9,7 +9,6 @@
 
 extern t_config config;
 extern uint16_t ch1Capture[NUM_SAMPLES];
-extern uint16_t bitStore[NUM_SAMPLES];
 extern uint8_t couplingPos;
 
 extern uint8_t rangePos;
@@ -17,15 +16,13 @@ extern uint16_t sIndex;
 extern volatile bool hold;
 extern uint32_t samplingTime;
 
-int8_t bitOld[GRID_WIDTH] = {0};
-
 bool fade_color_clear = false;
 bool cDisplayed = false;
 bool paintLabels = false;  // repaint the labels on screen in draw loop
 
 const char* cplNames[] = {"GND","AC","DC"};
 const char* functionNames[] = {"SERIAL","LOAD","SAVE","AUTOCAL"};
-const char* zoomNames[] = {"x1","x2","x4","x8"};
+const char* zoomNames[] = {"x1","x2","x4","x8","x16"};
 const char* trigModeNames[] = {"AUTO","NORM","SNGL"};
 const char* trigSourceNames[] = {"A1","D1","D2","D3"};
 const char* rngNames[] = {"20V","10V","5V","2V","1V","0.5V","0.2V","0.1V","50mV","20mV","10mV","5mV"};
@@ -44,6 +41,7 @@ const uint16_t sampleUs[] =   {20,  30, 50, 100, 200, 500, 1000, 2000, 5000, 100
 
 // rendered waveform data is stored here for erasing
 int16_t ch1Old[GRID_WIDTH] = {0};
+int8_t bitOld[GRID_WIDTH] = {0};
 uint8_t currentFocus = L_timebase;
 
 
@@ -301,7 +299,6 @@ void clearNDrawSignals()
 	// draw the GRID_WIDTH section of the waveform from xCursorSnap
 	int16_t val1, val2;
 	int16_t transposedPt1, transposedPt2;
-	uint8_t shiftedVal;
 
 	// sampling stopped at sIndex - 1
 	int j = sIndex + xCursorSnap;
@@ -318,34 +315,38 @@ void clearNDrawSignals()
 			j = 0;
 
 		// erase old line segment 
-    if(wavesOld[D3]) {
-      val1 = (bitOld[i] & 0b10000000) ? dHeight/config.dsize[D3-1] : 0;
-      val2 = (bitOld[i + 1] & 0b10000000) ? dHeight/config.dsize[D3-1] : 0;
-      // clear the line segment
-      transposedPt1 = GRID_HEIGHT + vOffset + yCursorsOld[D3] - val1;
-      transposedPt2 = GRID_HEIGHT + vOffset + yCursorsOld[D3] - val2;
-      plotLineSegment(transposedPt1, transposedPt2, i, fade_color(DG_SIGNAL3)); 
-    }
+		if(wavesOld[D3])
+		{
+		  val1 = (bitOld[i] & 0x80) ? dHeight/config.dsize[D3-1] : 0;
+		  val2 = (bitOld[i + 1] & 0x80) ? dHeight/config.dsize[D3-1] : 0;
+		  // clear the line segment
+		  transposedPt1 = GRID_HEIGHT + vOffset + yCursorsOld[D3] - val1;
+		  transposedPt2 = GRID_HEIGHT + vOffset + yCursorsOld[D3] - val2;
+		  plotLineSegment(transposedPt1, transposedPt2, i, fade_color(DG_SIGNAL3));
+		}
 
-		if(wavesOld[D2])	{
-			val1 = (bitOld[i] & 0b01000000) ? dHeight/config.dsize[D2-1] : 0;
-			val2 = (bitOld[i + 1] & 0b01000000) ? dHeight/config.dsize[D2-1] : 0;
+		if(wavesOld[D2])
+		{
+			val1 = (bitOld[i] & 0x40) ? dHeight/config.dsize[D2-1] : 0;
+			val2 = (bitOld[i + 1] & 0x40) ? dHeight/config.dsize[D2-1] : 0;
 			// clear the line segment
 			transposedPt1 = GRID_HEIGHT + vOffset + yCursorsOld[D2] - val1;
 			transposedPt2 = GRID_HEIGHT + vOffset + yCursorsOld[D2] - val2;
-      plotLineSegment(transposedPt1, transposedPt2, i, fade_color(DG_SIGNAL2)); 
+			plotLineSegment(transposedPt1, transposedPt2, i, fade_color(DG_SIGNAL2));
 		}
-   
-		if(wavesOld[D1])	{
-			val1 = (bitOld[i] & 0b00100000) ? dHeight/config.dsize[D1-1] : 0;
-			val2 = (bitOld[i + 1] & 0b00100000) ? dHeight/config.dsize[D1-1] : 0;
+
+		if(wavesOld[D1])
+		{
+			val1 = (bitOld[i] & 0x20) ? dHeight/config.dsize[D1-1] : 0;
+			val2 = (bitOld[i + 1] & 0x20) ? dHeight/config.dsize[D1-1] : 0;
 			// clear the line segment
 			transposedPt1 = GRID_HEIGHT + vOffset + yCursorsOld[D1] - val1;
 			transposedPt2 = GRID_HEIGHT + vOffset + yCursorsOld[D1] - val2;
-      plotLineSegment(transposedPt1, transposedPt2, i, fade_color(DG_SIGNAL1)); 
+			plotLineSegment(transposedPt1, transposedPt2, i, fade_color(DG_SIGNAL1));
 		}
 
-		if(wavesOld[A1])	{
+		if(wavesOld[A1])
+		{
 			val1 = (ch1Old[i] * GRID_HEIGHT)/ADC_2_GRID;
 			val2 = (ch1Old[i + 1] * GRID_HEIGHT)/ADC_2_GRID;
 			// clear the line segment
@@ -353,47 +354,49 @@ void clearNDrawSignals()
 			transposedPt2 = GRID_HEIGHT + vOffset + yCursorsOld[A1] - val2;
 			plotLineSegment(transposedPt1, transposedPt2, i, fade_color(AN_SIGNAL1)); 
 		}
-  	
+
 		// draw new segments
-		if(wavesSnap[D3])	{
-			shiftedVal = bitStore[j] >> 8;
-			val1 = (shiftedVal & 0b10000000) ? dHeight/config.dsize[D3-1] : 0;
-			val2 = ((bitStore[jn] >> 8) & 0b10000000) ? dHeight/config.dsize[D3-1] : 0;
-			bitOld[i] &= 0b01111111;
-			bitOld[i] |= shiftedVal & 0b10000000;
+		if(wavesSnap[D3])
+		{
+			val1 = (ch1Capture[j] & 0x8000) ? dHeight/config.dsize[D3-1] : 0;
+			val2 = (ch1Capture[jn] & 0x8000) ? dHeight/config.dsize[D3-1] : 0;
+			bitOld[i] &= 0b0111;
+			bitOld[i] |= (ch1Capture[j]>>8) & 0x80;
 			// draw the line segment
 			transposedPt1 = GRID_HEIGHT + vOffset + yCursorsSnap[D3] - val1;
 			transposedPt2 = GRID_HEIGHT + vOffset + yCursorsSnap[D3] - val2;
 			plotLineSegment(transposedPt1, transposedPt2, i, DG_SIGNAL3);
 		}
 
-    if(wavesSnap[D2])  {
-      shiftedVal = bitStore[j] >> 8;
-      val1 = (shiftedVal & 0b01000000) ? dHeight/config.dsize[D2-1] : 0;
-      val2 = ((bitStore[jn] >> 8) & 0b01000000) ? dHeight/config.dsize[D2-1] : 0;
-      bitOld[i] &= 0b10111111;
-      bitOld[i] |= shiftedVal & 0b01000000;
-      // draw the line segment
-      transposedPt1 = GRID_HEIGHT + vOffset + yCursorsSnap[D2] - val1;
-      transposedPt2 = GRID_HEIGHT + vOffset + yCursorsSnap[D2] - val2;
-      plotLineSegment(transposedPt1, transposedPt2, i, DG_SIGNAL2);
-    }    
-		if(wavesSnap[D1])	{
-			shiftedVal = bitStore[j] >> 8;
-			val1 = (shiftedVal & 0b00100000) ? dHeight/config.dsize[D1-1] : 0;
-			val2 = ((bitStore[jn] >> 8) & 0b00100000) ? dHeight/config. dsize[D1-1] : 0;
-			bitOld[i] &= 0b11011111;
-			bitOld[i] |= shiftedVal & 0b00100000;
+		if(wavesSnap[D2])
+		{
+		  val1 = (ch1Capture[j] & 0x4000) ? dHeight/config.dsize[D2-1] : 0;
+		  val2 = (ch1Capture[jn] & 0x4000) ? dHeight/config.dsize[D2-1] : 0;
+		  bitOld[i] &= 0b10111;
+		  bitOld[i] |= (ch1Capture[j]>>8) & 0x40;
+		  // draw the line segment
+		  transposedPt1 = GRID_HEIGHT + vOffset + yCursorsSnap[D2] - val1;
+		  transposedPt2 = GRID_HEIGHT + vOffset + yCursorsSnap[D2] - val2;
+		  plotLineSegment(transposedPt1, transposedPt2, i, DG_SIGNAL2);
+		}
+
+		if(wavesSnap[D1])
+		{
+			val1 = (ch1Capture[j] & 0x2000) ? dHeight/config.dsize[D1-1] : 0;
+			val2 = (ch1Capture[jn] & 0x2000) ? dHeight/config. dsize[D1-1] : 0;
+			bitOld[i] &= 0b1101;
+			bitOld[i] |= (ch1Capture[j]>>8) & 0x20;
 			// draw the line segment
 			transposedPt1 = GRID_HEIGHT + vOffset + yCursorsSnap[D1] - val1;
 			transposedPt2 = GRID_HEIGHT + vOffset + yCursorsSnap[D1] - val2;
 			plotLineSegment(transposedPt1, transposedPt2, i, DG_SIGNAL1);
 		}
 		
-		if(wavesSnap[A1])	{
-			val1 = ((ch1Capture[j] - zeroVoltageA1Snap) * GRID_HEIGHT)/ADC_2_GRID;
-			val2 = ((ch1Capture[jn] - zeroVoltageA1Snap) * GRID_HEIGHT)/ADC_2_GRID;
-			ch1Old[i] = ch1Capture[j] - zeroVoltageA1Snap;
+		if(wavesSnap[A1])
+		{
+			val1 = (((ch1Capture[j] & 0x0FFF) - zeroVoltageA1Snap) * GRID_HEIGHT)/ADC_2_GRID;
+			val2 = (((ch1Capture[jn] & 0x0FFF) - zeroVoltageA1Snap) * GRID_HEIGHT)/ADC_2_GRID;
+			ch1Old[i] = (ch1Capture[j] & 0x0FFF) - zeroVoltageA1Snap;
 			// draw the line segment
 			transposedPt1 = GRID_HEIGHT + vOffset + yCursorsSnap[A1] - val1;
 			transposedPt2 = GRID_HEIGHT + vOffset + yCursorsSnap[A1] - val2;
@@ -499,12 +502,12 @@ void drawLabels()
 		tft_print((char*)"RUN");
 	}
 
- //Draw Zoom Label
-  tft_setTextColor(ILI9341_GREEN, ILI9341_BLACK);
-  tft_setCursor(65, 4);
-  if(currentFocus == L_zoom)
+    //Draw Zoom Label
+    tft_setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+    tft_setCursor(65, 4);
+    if(currentFocus == L_zoom)
     tft_drawRect(60, 0, 25, vOffset, ILI9341_WHITE);
-  tft_print((char*)zoomNames[config.zoomFactor]);
+    tft_print((char*)zoomNames[config.zoomFactor]);
 
 	// draw x-window at top, range = 200px
 	// -----------------
@@ -675,7 +678,7 @@ void drawStats()
 		clearStats = true;
 	}
 	// draw stat labels
-	tft_setTextColor(ILI9341_RED, ILI9341_BLACK);
+	tft_setTextColor(ILI9341_RED, ILI9341_RED);
 
 	tft_setCursor(25, 20);
 	tft_print((char*)"Freq:");
@@ -698,7 +701,7 @@ void drawStats()
 	tft_print((char*)"Vrms:");
 	
 	// print new stats
-	tft_setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft_setTextColor(ILI9341_WHITE, ILI9341_WHITE);
 
 	if(clearStats)
 		tft_writeFillRect(65, 20, 55, 50, ILI9341_BLACK);
@@ -770,20 +773,20 @@ void calculateStats()
     if(j == NUM_SAMPLES)
       j = 0;
 
-		val = ch1Capture[j] - config.zeroVoltageA1;
+		val = (ch1Capture[j] & 0x0FFF) - config.zeroVoltageA1;
 		if(Vmax < val)
 			Vmax = val;
 		if(Vmin > val)
 			Vmin = val;
 
 		sumSamples += val;
-		freqSumSamples += ch1Capture[j];
+		freqSumSamples += (ch1Capture[j]  & 0x0FFF);
 		sumSquares += (val * val);
 	}
 
 	// find out frequency
 	uint16_t fVavr = freqSumSamples/i;
-	bool dnWave = (ch1Capture[sIndex] < fVavr - 10);
+	bool dnWave = ((ch1Capture[sIndex] & 0x0FFF) < fVavr - 10);
 	bool firstOne = true;
 	uint16_t cHigh = 0;
 
@@ -803,8 +806,10 @@ void calculateStats()
       j = 0;
 
 		// mark the points where wave transitions the average value
-		if(dnWave && (ch1Capture[j] > fVavr + 10))	{
-			if(!firstOne)	{
+		if(dnWave && ((ch1Capture[j] & 0x0FFF) > fVavr + 10))
+		{
+			if(!firstOne)
+			{
 				sumCW += (i - 1 - cHigh);
 				numCycles++;
 			}
@@ -815,8 +820,10 @@ void calculateStats()
 			cHigh = i-1;
 		}
 
-		if(!dnWave && (ch1Capture[j] < fVavr - 10))	{
-			if(!firstOne)	{
+		if(!dnWave && ((ch1Capture[j] & 0x0FFF) < fVavr - 10))
+		{
+			if(!firstOne)
+			{
 				sumPW += ( i- 1 - cHigh);
 				numHCycles++;
 			}
@@ -856,7 +863,7 @@ void calculateSimpleStats()
   static uint8_t arrayptr = 0;
 
   //dd last sample to array
-  sample_buf[arrayptr] = ch1Capture[sIndex] - config.zeroVoltageA1;
+  sample_buf[arrayptr] = (ch1Capture[sIndex] & 0x0FFF) - config.zeroVoltageA1;
   arrayptr++;
   if (arrayptr == FLOAT_AVG_BUFSIZE)
 	  arrayptr = 0;
@@ -961,41 +968,39 @@ void draw_markerstats(void)
 	td = t2 -t1;
 
 	// draw stat labels
-	tft_setTextColor(ILI9341_RED, ILI9341_BLACK);
-	tft_setCursor(25, 20);
+	tft_setTextColor(ILI9341_RED, ILI9341_RED);
+	tft_setCursor(20, 20);
 	tft_print((char*)"T1:");
-	tft_setCursor(25, 30);
+	tft_setCursor(20, 30);
 	tft_print((char*)"T2:");
-	tft_setCursor(25, 40);
+	tft_setCursor(20, 40);
 	tft_print((char*)"Td:");
 
-	tft_setCursor(230, 20);
+	tft_setCursor(240, 20);
 	tft_print((char*)"V1:");
-	tft_setCursor(230, 30);
+	tft_setCursor(240, 30);
 	tft_print((char*)"V2:");
-	tft_setCursor(230, 40);
+	tft_setCursor(240, 40);
 	tft_print((char*)"Vd:");
 
 	//clear stats
-	tft_writeFillRect(265, 20, GRID_WIDTH + hOffset - 265 - 1, 50, ILI9341_BLACK);
-	tft_writeFillRect(52, 20, 50, 50, ILI9341_BLACK);
+	tft_writeFillRect(265, 20, GRID_WIDTH + hOffset - 265 - 1, 30, ILI9341_BLACK);
+	tft_writeFillRect(47, 20, 50, 30, ILI9341_BLACK);
 
 	// print new stats
-	tft_setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+	tft_setTextColor(ILI9341_WHITE, ILI9341_WHITE);
 	drawVoltage(v1, 20, mvPos);
 	drawVoltage(v2, 30, mvPos);
 	drawVoltage(vd, 40, mvPos);
 
 
-	tft_setCursor(52, 20);
+	tft_setCursor(47, 20);
 	tft_print(t1);tft_print((char*)" ms");
-	tft_setCursor(52, 30);
+	tft_setCursor(47, 30);
 	tft_print(t2); tft_print((char*)" ms");
-	tft_setCursor(52, 40);
+	tft_setCursor(47, 40);
 	tft_print(td); tft_print((char*)" ms");
-
 }
-
 
 
 // ------------------------
@@ -1006,7 +1011,7 @@ void drawVoltageLarge(float volt, int y,uint16_t col)
   int numDigits = 1;
   int lVolt = volt;
   
-  tft_setTextColor(col, ILI9341_BLACK);
+  tft_setTextColor(col, col);
 
   // is there a negative sign at front
   if(volt < 0)  
@@ -1118,14 +1123,11 @@ tft_print((char*)"GNU GENERAL PUBLIC LICENSE Version 3");
 }
 
 
-
 void drawtextbox(t_tb_data *pTextbox)
 {
-
 	  tft_drawRect(pTextbox->x, pTextbox->y, pTextbox->w, pTextbox->h, ILI9341_WHITE);
 	  tft_writeFillRect(pTextbox->x+1, pTextbox->y+1, pTextbox->w-2, pTextbox->h-2, ILI9341_BLACK);
 }
-
 
 
 void showtextbox(t_tb_data *pTextbox,char* text)
